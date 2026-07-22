@@ -1,0 +1,32 @@
+# Raw and intermediate data are re-fetchable / re-buildable -- don't version them.
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+# Once you've built these from REAL OEWS data (not the synthetic test fixture
+# used to validate the crosswalk logic during scaffolding), you may want to
+# un-ignore and commit sector_exposure_scores.csv / analysis_panel.csv so the
+# repo is reproducible without re-running the full pipeline. Not done by
+# default to avoid ever accidentally committing synthetic/placeholder output.
+
+output/figures/*
+!output/figures/.gitkeep
+output/tables/*
+!output/tables/.gitkeep
+
+# Secrets
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+*.egg-info/
+
+# OS
+.DS_Store

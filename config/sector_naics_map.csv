@@ -1,0 +1,42 @@
+indeed_display_name,group,naics_codes,crosswalk_confidence,notes
+Software Development,tech,"5415;5112",high,Primary sector of interest. Computer Systems Design + Software Publishers.
+IT Systems & Solutions,tech,5415,high,Computer Systems Design and Related Services.
+"IT Infrastructure, Operations & Support",tech,"5415;5182",medium,Adds Data Processing/Hosting/Related Services.
+Data & Analytics,tech,"5415;5182",medium,Analytics roles span consulting and in-house; imperfect NAICS match.
+Civil Engineering,stem_control,5413,high,Architectural/Engineering Services.
+Electrical Engineering,stem_control,5413,high,Architectural/Engineering Services.
+Industrial Engineering,stem_control,5413,high,Architectural/Engineering Services.
+Mechanical Engineering,stem_control,5413,high,Architectural/Engineering Services.
+Architecture,stem_control,5413,high,Architectural/Engineering Services.
+Scientific Research & Development,stem_control,5417,high,Scientific Research and Development Services.
+Accounting,non_stem_control,5412,high,Accounting/Tax Prep/Bookkeeping/Payroll Services.
+Administrative Assistance,non_stem_control,5611,medium,Office Administrative Services; cross-cutting occupation.
+Banking & Finance,non_stem_control,"5221;5231",medium,Depository credit intermediation + securities/investments.
+Human Resources,non_stem_control,5613,medium,Employment Services as proxy; HR roles exist in every industry.
+Retail,non_stem_control,4521,low,"Heterogeneous; department stores used as representative NAICS only."
+Sales,non_stem_control,4241,low,Highly heterogeneous across industries; treat with caution in exposure-weighted specs.
+Marketing,non_stem_control,5418,medium,Advertising/PR/Related Services.
+Customer Service,non_stem_control,5614,low,Cross-cutting occupation; Business Support Services as rough proxy.
+Management,non_stem_control,5511,low,Cross-cutting occupation; Management of Companies as rough proxy.
+Project Management,non_stem_control,5416,low,Cross-cutting occupation; Management/Scientific/Technical Consulting as proxy.
+Arts & Entertainment,excluded,7111,low,Too heterogeneous for a single NAICS proxy.
+Personal Care & Home Health,excluded,6216,medium,Home Health Care Services.
+Childcare,excluded,6244,high,Child Day Care Services.
+Education & Instruction,excluded,"6111;6113",medium,K-12 + Colleges/Universities.
+Food Preparation & Service,excluded,7225,high,Restaurants and Other Eating Places.
+Hospitality & Tourism,excluded,7211,high,Traveler Accommodation.
+Installation & Maintenance,excluded,8113,low,Commercial/Industrial Machinery Repair as rough proxy.
+Legal,excluded,5411,high,Legal Services.
+Production & Manufacturing,excluded,3399,low,Too heterogeneous across manufacturing subsectors.
+Physicians & Surgeons,excluded,6211,high,Offices of Physicians.
+Media & Communications,excluded,"5151;5191",medium,Broadcasting + Other Information Services.
+Medical Information,excluded,6215,low,Ambiguous title-to-industry mapping.
+Nursing,excluded,6221,medium,General Medical and Surgical Hospitals as proxy.
+Medical Technician,excluded,6215,medium,Medical and Diagnostic Laboratories.
+Pharmacy,excluded,4461,medium,Health and Personal Care Stores as proxy.
+Security & Public Safety,excluded,5616,medium,Investigation and Security Services.
+Cleaning & Sanitation,excluded,5617,high,Services to Buildings and Dwellings.
+Community & Social Service,excluded,6241,high,Individual and Family Services.
+Social Science,excluded,5417,low,Rough proxy only; social scientists span academia and consulting.
+Logistic Support,excluded,4884,low,Support Activities for Transportation as rough proxy.
+Loading & Stocking,excluded,4931,medium,Warehousing and Storage.

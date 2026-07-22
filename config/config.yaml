@@ -1,0 +1,162 @@
+# =============================================================================
+# ai-labor-exposure: central configuration
+#
+# Every script in src/ reads from this file rather than hard-coding dates,
+# series IDs, or sector lists. Edit here first if something needs to change.
+# =============================================================================
+
+project:
+  name: "ai-labor-exposure"
+  # Panel time aggregation. Indeed data is daily; BLS CES is monthly.
+  # "weekly" is the recommended default -- daily is noisy, monthly throws away
+  # the precision that's the whole point of using Indeed data.
+  time_aggregation: "weekly"
+
+# -----------------------------------------------------------------------------
+# Sample window
+# -----------------------------------------------------------------------------
+sample:
+  start_date: "2021-01-01"   # ~18 months of pre-period before the Fed hikes
+  end_date: "2025-12-31"     # trim the last ~6 months at analysis time to avoid
+                             # revision noise in the most recent Indeed data
+
+# -----------------------------------------------------------------------------
+# Key dates (Section 3, Institutional Background)
+# -----------------------------------------------------------------------------
+events:
+  fed_hiking_start: "2022-03-16"        # first 2022 FOMC rate hike
+  copilot_technical_preview: "2021-06-29"
+  copilot_ga: "2022-06-21"              # PRIMARY treatment date -- narrower, coding-specific
+  chatgpt_launch: "2022-11-30"          # ALTERNATE treatment date -- robustness check
+  gpt4_launch: "2023-03-14"
+  copilot_chat_ga: "2023-03-22"
+  major_layoff_wave_start: "2022-11-01" # approximate start of the visible tech layoff wave
+  major_layoff_wave_end: "2023-06-30"
+
+  # Which event date the main specifications use by default.
+  primary_event_date: "copilot_ga"
+
+# -----------------------------------------------------------------------------
+# Data source: Indeed Hiring Lab (github.com/hiring-lab/job_postings_tracker)
+# No API key needed. CC-BY-4.0. Fetched directly from raw.githubusercontent.com.
+# -----------------------------------------------------------------------------
+indeed:
+  repo_raw_base: "https://raw.githubusercontent.com/hiring-lab/job_postings_tracker/master"
+  country_code: "US"
+  files:
+    aggregate: "US/aggregate_job_postings_US.csv"
+    sector: "US/job_postings_by_sector_US.csv"
+
+# -----------------------------------------------------------------------------
+# Data source: BLS Current Employment Statistics (confirmatory outcome, Sec 4)
+# Official API v2 (https://api.bls.gov/publicAPI/v2/timeseries/data/).
+# Requires a free registration key: https://data.bls.gov/registrationEngine/
+# Set the BLS_API_KEY environment variable before running fetch_bls_ces.py.
+#
+# Series IDs below are verified against FRED/BLS as of July 2026.
+# CES = seasonally adjusted, CEU = not seasonally adjusted, same industry.
+# -----------------------------------------------------------------------------
+bls_ces:
+  start_year: 2019
+  end_year: 2026
+  series:
+    # NAICS 5415 -- Computer Systems Design and Related Services
+    # This is the cleanest "coding-adjacent" confirmatory series.
+    computer_systems_design_sa: "CES6054150001"
+    computer_systems_design_nsa: "CEU6054150001"
+    # NAICS 5413 -- Architectural, Engineering, and Related Services
+    # STEM control: exposed to the same 2022-23 tech-sector shock, much less
+    # exposed to LLM coding tools specifically.
+    architecture_engineering_sa: "CES6054130001"
+    architecture_engineering_nsa: "CEU6054130001"
+    # NAICS 54 aggregate -- Professional, Scientific, and Technical Services
+    prof_sci_tech_services_sa: "CES6054000001"
+    prof_sci_tech_services_nsa: "CEU6054000001"
+    # Supersector 60 -- Professional and Business Services (broader control)
+    prof_business_services_sa: "CES6000000001"
+    # Total nonfarm -- macro control / denominator for share calculations
+    total_nonfarm_sa: "CES0000000001"
+
+# -----------------------------------------------------------------------------
+# Data source: exposure scores
+# -----------------------------------------------------------------------------
+exposure:
+  eloundou:
+    # openai/GPTs-are-GPTs, occupation-level scores keyed by O*NET-SOC code.
+    # No API key needed, public GitHub repo.
+    url: "https://raw.githubusercontent.com/openai/GPTs-are-GPTs/main/data/occ_level.csv"
+    # Which column to treat as "the" exposure score in main specs.
+    # alpha = E1 (LLM alone), beta = E1+E2 (LLM + existing software),
+    # gamma = E1+E2+E3 (+ complementary technology, e.g. LLM-powered coding tools).
+    # beta is used as the default in most follow-on applied work.
+    primary_column: "dv_rating_beta"
+    alt_columns: ["dv_rating_alpha", "dv_rating_gamma", "human_rating_beta"]
+
+  aioe:
+    # AIOE-Data/AIOE, Felten/Raj/Seamans (2021). No API key needed.
+    url: "https://raw.githubusercontent.com/AIOE-Data/AIOE/master/AIOE_DataAppendix.xlsx"
+    occupation_sheet: "Appendix A"   # SOC-level AIOE
+    industry_sheet: "Appendix B"     # NAICS(4-digit)-level AIIE -- no crosswalk needed
+
+  # OEWS staffing patterns are the bridge from SOC-level exposure scores to
+  # NAICS-level / Indeed-sector-level exposure scores (Sec 4, crosswalk issue).
+  # BLS does not expose this as a clean API -- it is a bulk file download.
+  # fetch_oews_staffing_patterns.py will attempt an automatic download; if BLS
+  # changes the URL pattern, the script prints the manual download page.
+  oews:
+    reference_year: 2024   # most recent complete OEWS vintage as of writing
+    # Historical pattern: https://www.bls.gov/oes/special.requests/oesm{YY}in4.zip
+    # Manual fallback page: https://www.bls.gov/oes/tables.htm
+    manual_fallback_url: "https://www.bls.gov/oes/tables.htm"
+
+# -----------------------------------------------------------------------------
+# Data source: Google Trends (Sec 4, mechanism data)
+# Uses pytrends -- no API key, but Google will rate-limit/CAPTCHA aggressive
+# pulls. Run this one locally, not in CI.
+# -----------------------------------------------------------------------------
+google_trends:
+  terms:
+    - "ChatGPT"
+    - "GitHub Copilot"
+    - "AI coding assistant"
+    - "learn to code"
+    - "computer science degree"
+    - "coding bootcamp"
+    - "tech layoffs"
+  geo: "US"
+  timeframe: "2021-01-01 2025-12-31"
+
+# -----------------------------------------------------------------------------
+# Sector categorization (Indeed "display_name" -> analysis group)
+# See config/sector_naics_map.csv for the full mapping incl. representative
+# NAICS codes used to pull OEWS staffing-pattern weights.
+# -----------------------------------------------------------------------------
+sector_groups:
+  tech:
+    - "Software Development"
+    - "IT Systems & Solutions"
+    - "IT Infrastructure, Operations & Support"
+    - "Data & Analytics"
+  stem_control:            # "SET" -- STEM, excluding tech
+    - "Civil Engineering"
+    - "Electrical Engineering"
+    - "Industrial Engineering"
+    - "Mechanical Engineering"
+    - "Architecture"
+    - "Scientific Research & Development"
+  non_stem_control:         # broad control group, unaffected by either shock
+    - "Accounting"
+    - "Administrative Assistance"
+    - "Banking & Finance"
+    - "Human Resources"
+    - "Retail"
+    - "Sales"
+    - "Marketing"
+    - "Customer Service"
+    - "Management"
+    - "Project Management"
+
+inference:
+  cluster_var: "sector"          # small number of clusters -> wild bootstrap
+  wild_bootstrap_reps: 9999
+  randomization_inference_reps: 5000
