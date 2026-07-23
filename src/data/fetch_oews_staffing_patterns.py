@@ -44,6 +44,7 @@ Usage:
 from __future__ import annotations
 
 import io
+import re
 import sys
 import zipfile
 
@@ -75,6 +76,7 @@ REQUEST_HEADERS = {
 }
 
 # Column names BLS has used across vintages for the fields we need.
+# o_group is optional (older vintages lack it) -- see _drop_nested_occupations.
 COL_ALIASES = {
     "naics": ["NAICS", "naics"],
     "naics_title": ["NAICS_TITLE", "naics_title"],
@@ -82,6 +84,16 @@ COL_ALIASES = {
     "occ_title": ["OCC_TITLE", "occ_title"],
     "tot_emp": ["TOT_EMP", "tot_emp"],
 }
+OPTIONAL_COL_ALIASES = {
+    "o_group": ["O_GROUP", "o_group"],
+}
+
+# The estimates workbook we want is the national 4-digit NAICS file
+# ("nat4d_M2024_dl.xlsx"). The archive also ships nat3d / nat5d_6d / natsector
+# cuts at other NAICS granularities, and "_owner" variants that split the same
+# employment across ownership classes -- summing one of those would double
+# count. Match the 4-digit non-owner file explicitly rather than guessing.
+_PREFERRED_NAME_RE = re.compile(r"nat4d_M\d{4}_dl\.xlsx?$", re.IGNORECASE)
 
 
 def _find_local_file(yy: str) -> "pd.io.common.FilePath | None":
@@ -89,6 +101,12 @@ def _find_local_file(yy: str) -> "pd.io.common.FilePath | None":
         p = OEWS_DIR / f"oesm{yy}in4.{ext}"
         if p.exists():
             return p
+    # Also accept the estimates workbook under its original BLS name, so a
+    # hand-extracted archive can just be dropped into data/raw/oews/.
+    named = sorted(p for p in OEWS_DIR.glob("*.xls*") if _PREFERRED_NAME_RE.search(p.name))
+    if named:
+        print(f"[oews] using local {named[0].name}")
+        return named[0]
     # Fall back to a previously downloaded zip (either cached by _download or
     # dropped in by hand per the MANUAL STEP) so a re-parse never needs another
     # request -- BLS rate-limits repeat downloads and starts returning 403s.
@@ -107,11 +125,17 @@ _METADATA_NAME_HINTS = ("field_description", "field descriptions", "readme", "no
 def _extract_data_xlsx(zip_path, yy: str) -> "pd.io.common.FilePath | None":
     """Pull the actual estimates workbook out of a BLS OEWS zip.
 
-    The archive ships the data file next to a small "field_descriptions"
-    readme workbook; taking namelist()[0] can grab the readme, which then
-    fails column standardization with a confusing KeyError. Filter the
-    obvious metadata names out and take the largest remaining workbook --
-    the estimates file is tens of MB, the readme is tens of KB.
+    The archive ships eight workbooks: the national 4-digit NAICS estimates we
+    want, the same data cut at other NAICS granularities (nat3d, nat5d_6d,
+    natsector), "_owner" variants that split employment across ownership
+    classes, and a small "field_descriptions" readme. Taking namelist()[0]
+    grabbed the readme, which then failed column standardization with a
+    confusing KeyError.
+
+    Match the 4-digit non-owner file by name first. Falling back to "largest
+    workbook" would happen to work for the May 2024 vintage but is not safe in
+    general -- picking nat3d or an _owner cut would silently feed the crosswalk
+    the wrong NAICS granularity or double-counted employment.
     """
     with zipfile.ZipFile(zip_path) as zf:
         candidates = [
@@ -121,7 +145,14 @@ def _extract_data_xlsx(zip_path, yy: str) -> "pd.io.common.FilePath | None":
         ]
         if not candidates:
             return None
-        best = max(candidates, key=lambda i: i.file_size)
+        preferred = [i for i in candidates if _PREFERRED_NAME_RE.search(i.filename)]
+        if preferred:
+            best = preferred[0]
+        else:
+            best = max(candidates, key=lambda i: i.file_size)
+            print(f"[oews]   WARNING: no nat4d file in archive, falling back to "
+                  f"largest workbook ({best.filename}) -- verify this is the "
+                  f"4-digit NAICS national estimates file")
         out_path = OEWS_DIR / f"oesm{yy}in4.xlsx"
         out_path.write_bytes(zf.read(best.filename))
         print(f"[oews]   extracted {best.filename} "
@@ -182,7 +213,43 @@ def _standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
                 f"Could not find any of {aliases} in OEWS file columns: "
                 f"{list(df.columns)[:20]}..."
             )
-    return df.rename(columns=rename)[list(COL_ALIASES.keys())]
+    keep = list(COL_ALIASES.keys())
+    for target, aliases in OPTIONAL_COL_ALIASES.items():
+        for a in aliases:
+            if a in df.columns:
+                rename[a] = target
+                keep.append(target)
+                break
+    return df.rename(columns=rename)[keep]
+
+
+def _drop_nested_occupations(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only detailed (6-digit SOC) occupation rows.
+
+    OEWS reports each NAICS industry at five nested occupation levels --
+    total ("00-0000 All Occupations"), major, minor, broad, and detailed --
+    and the coarser rows are sums of the finer ones. Dropping only the
+    "00-0000" total still leaves major/minor/broad in, so summing tot_emp
+    counts every worker about four times over (613M vs. the true ~153M for
+    the May 2024 vintage).
+
+    That inflation happens to cancel out of the final exposure scores today,
+    because np.average renormalizes the weights and no aggregate SOC code
+    matches an Eloundou/AIOE score anyway -- but it makes the
+    `employment_covered` diagnostic meaningless and would start silently
+    biasing the weights the moment a coarse code did match. Filter properly.
+    """
+    if "o_group" in df.columns:
+        detailed = df[df["o_group"].astype(str).str.strip().str.lower() == "detailed"]
+        if len(detailed) > 0:
+            return detailed.drop(columns=["o_group"])
+        print("[oews]   WARNING: o_group column present but no 'detailed' rows "
+              "found -- falling back to dropping the 00-0000 total only")
+        df = df.drop(columns=["o_group"])
+    else:
+        print("[oews]   note: no O_GROUP column in this vintage -- falling back "
+              "to dropping the 00-0000 total only (aggregate rows may remain)")
+    return df[df["occ_code"] != "00-0000"]
 
 
 def fetch_oews_staffing_patterns(cfg: dict | None = None) -> pd.DataFrame:
@@ -215,14 +282,18 @@ def fetch_oews_staffing_patterns(cfg: dict | None = None) -> pd.DataFrame:
     df["naics"] = df["naics"].astype(str).str.strip()
     df["occ_code"] = df["occ_code"].astype(str).str.strip()
 
-    # Drop the "00-0000 All Occupations" total rows -- we want detailed
-    # occupations only so employment shares within a NAICS sum to ~1.
-    df = df[df["occ_code"] != "00-0000"]
+    # Keep detailed occupations only, so employment shares within a NAICS sum
+    # to ~1 instead of ~4 (see _drop_nested_occupations).
+    n_before = len(df)
+    df = _drop_nested_occupations(df)
+    print(f"[oews]   kept {len(df):,} detailed-occupation rows of {n_before:,} "
+          f"(dropped nested total/major/minor/broad aggregates)")
 
     out_path = OEWS_DIR / "oews_staffing_patterns.csv"
     df.to_csv(out_path, index=False)
     print(f"[oews]   saved {out_path}  ({len(df):,} NAICS x SOC rows, "
-          f"{df['naics'].nunique()} industries)")
+          f"{df['naics'].nunique()} industries, "
+          f"{df['tot_emp'].sum():,.0f} total employment)")
     return df
 
 

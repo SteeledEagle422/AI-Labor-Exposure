@@ -1,5 +1,5 @@
 indeed_display_name,group,naics_codes,crosswalk_confidence,notes
-Software Development,tech,"5415;5112",high,Primary sector of interest. Computer Systems Design + Software Publishers.
+Software Development,tech,"5415;5132",high,Primary sector of interest. Computer Systems Design + Software Publishers (5112 -> 5132 in NAICS 2022).
 IT Systems & Solutions,tech,5415,high,Computer Systems Design and Related Services.
 "IT Infrastructure, Operations & Support",tech,"5415;5182",medium,Adds Data Processing/Hosting/Related Services.
 Data & Analytics,tech,"5415;5182",medium,Analytics roles span consulting and in-house; imperfect NAICS match.
@@ -11,10 +11,10 @@ Architecture,stem_control,5413,high,Architectural/Engineering Services.
 Scientific Research & Development,stem_control,5417,high,Scientific Research and Development Services.
 Accounting,non_stem_control,5412,high,Accounting/Tax Prep/Bookkeeping/Payroll Services.
 Administrative Assistance,non_stem_control,5611,medium,Office Administrative Services; cross-cutting occupation.
-Banking & Finance,non_stem_control,"5221;5231",medium,Depository credit intermediation + securities/investments.
+Banking & Finance,non_stem_control,"5220;5230",medium,"Credit intermediation + securities/investments (5221/5231 retired in NAICS 2022; OEWS publishes 5220A1 and 523000)."
 Human Resources,non_stem_control,5613,medium,Employment Services as proxy; HR roles exist in every industry.
-Retail,non_stem_control,4521,low,"Heterogeneous; department stores used as representative NAICS only."
-Sales,non_stem_control,4241,low,Highly heterogeneous across industries; treat with caution in exposure-weighted specs.
+Retail,non_stem_control,4550,low,"Heterogeneous; General Merchandise Retailers (4521 department stores retired in NAICS 2022, folded into 455)."
+Sales,non_stem_control,4240,low,"Highly heterogeneous; 4241 retired in NAICS 2022, OEWS publishes combined 4240A1/A2/A3 nondurable wholesalers. Treat with caution."
 Marketing,non_stem_control,5418,medium,Advertising/PR/Related Services.
 Customer Service,non_stem_control,5614,low,Cross-cutting occupation; Business Support Services as rough proxy.
 Management,non_stem_control,5511,low,Cross-cutting occupation; Management of Companies as rough proxy.
@@ -29,11 +29,11 @@ Installation & Maintenance,excluded,8113,low,Commercial/Industrial Machinery Rep
 Legal,excluded,5411,high,Legal Services.
 Production & Manufacturing,excluded,3399,low,Too heterogeneous across manufacturing subsectors.
 Physicians & Surgeons,excluded,6211,high,Offices of Physicians.
-Media & Communications,excluded,"5151;5191",medium,Broadcasting + Other Information Services.
+Media & Communications,excluded,"5161;5192",medium,Broadcasting + Other Information Services (5151/5191 renumbered in NAICS 2022).
 Medical Information,excluded,6215,low,Ambiguous title-to-industry mapping.
 Nursing,excluded,6221,medium,General Medical and Surgical Hospitals as proxy.
 Medical Technician,excluded,6215,medium,Medical and Diagnostic Laboratories.
-Pharmacy,excluded,4461,medium,Health and Personal Care Stores as proxy.
+Pharmacy,excluded,4561,medium,Health and Personal Care Retailers as proxy (4461 -> 4561 in NAICS 2022).
 Security & Public Safety,excluded,5616,medium,Investigation and Security Services.
 Cleaning & Sanitation,excluded,5617,high,Services to Buildings and Dwellings.
 Community & Social Service,excluded,6241,high,Individual and Family Services.
