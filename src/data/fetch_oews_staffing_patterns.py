@@ -21,14 +21,22 @@ aggregated across all NAICS codes mapped to that Indeed sector in
 config/sector_naics_map.csv.
 
 MANUAL STEP (if the automatic download fails):
+  bls.gov rate-limits automated downloads and will start returning
+  "403 Access Denied" after a few requests, even with a well-behaved
+  User-Agent. When that happens, fetch the file once from a browser:
+
   1. Go to https://www.bls.gov/oes/tables.htm
   2. Find "May {YEAR} National Industry-Specific Occupational Employment
-     and Wage Estimates" and download the XLS/XLSX bulk file (all industries,
-     4-digit NAICS). Historically named oesm{YY}in4.xlsx or .zip.
-  3. Save it as:
-       data/raw/oews/oesm{YY}in4.xlsx
-     (unzip first if BLS ships it as a .zip)
-  4. Re-run this script -- it will find the local file and skip the download.
+     and Wage Estimates" and download the bulk file for all industries at
+     4-digit NAICS. As of the May 2024 vintage the direct link is
+     https://www.bls.gov/oes/special-requests/oesm24in4.zip (~32 MB).
+  3. Save it as EITHER:
+       data/raw/oews/oesm{YY}in4.zip     (preferred -- kept for re-parsing)
+       data/raw/oews/oesm{YY}in4.xlsx    (if you unzip it yourself)
+     If you unzip by hand, take the large estimates workbook, NOT the small
+     "field_descriptions" readme that ships beside it.
+  4. Re-run this script -- it finds the local file and skips the download
+     entirely, so no further requests hit bls.gov.
 
 Usage:
     python -m src.data.fetch_oews_staffing_patterns
@@ -46,12 +54,25 @@ from src.utils.config import load_config, RAW_DIR, ensure_dirs
 
 OEWS_DIR = RAW_DIR / "oews"
 
-# Historical BLS bulk-file URL pattern for the 4-digit NAICS industry file.
-# BLS does periodically restructure this -- if it 404s, use the manual step.
+# BLS bulk-file URL patterns for the 4-digit NAICS industry file.
+# BLS renamed the directory "special.requests" -> "special-requests" (dot to
+# hyphen); the old dotted path now silently 301s to the OEWS landing page for
+# recent vintages instead of 404ing, so the hyphenated form is tried FIRST and
+# the response is content-type checked below rather than trusted on status
+# code alone. The dotted form is kept as a fallback for older vintages.
 CANDIDATE_URL_PATTERNS = [
+    "https://www.bls.gov/oes/special-requests/oesm{yy}in4.zip",
+    "https://www.bls.gov/oes/special-requests/oesm{yy}in4.xlsx",
     "https://www.bls.gov/oes/special.requests/oesm{yy}in4.zip",
     "https://www.bls.gov/oes/special.requests/oesm{yy}in4.xlsx",
 ]
+
+# bls.gov returns 403 to the default python-requests User-Agent. These are
+# public-domain bulk files published for download; BLS just wants automated
+# clients to identify themselves, so send a descriptive UA.
+REQUEST_HEADERS = {
+    "User-Agent": "ai-labor-exposure/1.0 (research data pipeline; python-requests)"
+}
 
 # Column names BLS has used across vintages for the fields we need.
 COL_ALIASES = {
@@ -68,7 +89,44 @@ def _find_local_file(yy: str) -> "pd.io.common.FilePath | None":
         p = OEWS_DIR / f"oesm{yy}in4.{ext}"
         if p.exists():
             return p
+    # Fall back to a previously downloaded zip (either cached by _download or
+    # dropped in by hand per the MANUAL STEP) so a re-parse never needs another
+    # request -- BLS rate-limits repeat downloads and starts returning 403s.
+    zip_path = OEWS_DIR / f"oesm{yy}in4.zip"
+    if zip_path.exists():
+        print(f"[oews] found local {zip_path}, extracting instead of downloading")
+        return _extract_data_xlsx(zip_path, yy)
     return None
+
+
+# Metadata/readme workbooks that ship alongside the actual estimates and must
+# not be mistaken for it.
+_METADATA_NAME_HINTS = ("field_description", "field descriptions", "readme", "notes")
+
+
+def _extract_data_xlsx(zip_path, yy: str) -> "pd.io.common.FilePath | None":
+    """Pull the actual estimates workbook out of a BLS OEWS zip.
+
+    The archive ships the data file next to a small "field_descriptions"
+    readme workbook; taking namelist()[0] can grab the readme, which then
+    fails column standardization with a confusing KeyError. Filter the
+    obvious metadata names out and take the largest remaining workbook --
+    the estimates file is tens of MB, the readme is tens of KB.
+    """
+    with zipfile.ZipFile(zip_path) as zf:
+        candidates = [
+            i for i in zf.infolist()
+            if i.filename.lower().endswith((".xlsx", ".xls"))
+            and not any(h in i.filename.lower() for h in _METADATA_NAME_HINTS)
+        ]
+        if not candidates:
+            return None
+        best = max(candidates, key=lambda i: i.file_size)
+        out_path = OEWS_DIR / f"oesm{yy}in4.xlsx"
+        out_path.write_bytes(zf.read(best.filename))
+        print(f"[oews]   extracted {best.filename} "
+              f"({best.file_size / 1e6:.1f} MB) -> {out_path}")
+        return out_path
 
 
 def _download(yy: str) -> "pd.io.common.FilePath | None":
@@ -76,20 +134,32 @@ def _download(yy: str) -> "pd.io.common.FilePath | None":
         url = pattern.format(yy=yy)
         print(f"[oews] attempting download <- {url}")
         try:
-            resp = requests.get(url, timeout=60)
+            resp = requests.get(url, timeout=180, headers=REQUEST_HEADERS)
             resp.raise_for_status()
         except requests.RequestException as e:
             print(f"[oews]   failed ({e})")
             continue
 
+        # A retired URL 301s to the OEWS landing page and still returns 200,
+        # so status alone doesn't mean we got the data file -- check we were
+        # actually handed a binary payload and not an HTML page.
+        content_type = resp.headers.get("Content-Type", "")
+        if "html" in content_type.lower():
+            print(f"[oews]   got an HTML page, not the data file "
+                  f"(redirected to {resp.url}) -- trying next candidate")
+            continue
+
         if url.endswith(".zip"):
-            zf = zipfile.ZipFile(io.BytesIO(resp.content))
-            xlsx_names = [n for n in zf.namelist() if n.lower().endswith((".xlsx", ".xls"))]
-            if not xlsx_names:
-                print("[oews]   zip contained no xlsx/xls file, skipping")
+            # Keep the raw zip so a re-parse never needs a second download --
+            # BLS rate-limits repeated hits and will start returning 403s.
+            zip_path = OEWS_DIR / f"oesm{yy}in4.zip"
+            zip_path.write_bytes(resp.content)
+            print(f"[oews]   saved {zip_path}")
+
+            out_path = _extract_data_xlsx(zip_path, yy)
+            if out_path is None:
+                print("[oews]   zip contained no usable xlsx/xls file, skipping")
                 continue
-            out_path = OEWS_DIR / f"oesm{yy}in4.xlsx"
-            out_path.write_bytes(zf.read(xlsx_names[0]))
         else:
             out_path = OEWS_DIR / f"oesm{yy}in4.xlsx"
             out_path.write_bytes(resp.content)

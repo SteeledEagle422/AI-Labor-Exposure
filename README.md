@@ -48,6 +48,9 @@ tests/
   test_absorb_fe.py        validates the core FE-absorption routine against
                            linearmodels.PanelOLS -- run this if you touch
                            src/analysis/utils.py
+results/                   committed write-up of what each run produced
+  RESULTS_TEMPLATE.md      copy this per run
+  RESULTS_<date>.md        one file per run (output/ itself is gitignored)
 data/                      raw/interim/processed (gitignored except .gitkeep)
 output/                    tables/ and figures/ (gitignored except .gitkeep)
 ```
@@ -71,12 +74,17 @@ will run at full strength:
   unregistered endpoint but is capped at ~10 years of history and
   25 queries/day.
 - **OEWS staffing-pattern file** (for `src/data/fetch_oews_staffing_patterns.py`):
-  the script attempts an automatic download; if BLS has restructured their
-  URLs (they do this periodically), download the May {year} "National
-  Industry-Specific Occupational Employment and Wage Estimates" (4-digit
-  NAICS) file by hand from https://www.bls.gov/oes/tables.htm and drop it at
-  `data/raw/oews/oesm{YY}in4.xlsx`. See the script's docstring for the exact
-  expected filename.
+  the script attempts an automatic download, but **bls.gov rate-limits
+  automated downloads and starts returning `403 Access Denied`**, so in
+  practice expect to fetch this one from a browser. Download the May {year}
+  "National Industry-Specific Occupational Employment and Wage Estimates"
+  (all industries, 4-digit NAICS) from https://www.bls.gov/oes/tables.htm --
+  for the May 2024 vintage that is
+  https://www.bls.gov/oes/special-requests/oesm24in4.zip (~32 MB) -- and drop
+  it at `data/raw/oews/oesm24in4.zip`. The script extracts and parses it from
+  there without any further network access. **This file is the only thing
+  standing between the pipeline and its two main specs** (continuous-exposure
+  DiD and triple-diff), so it is worth the two minutes.
 
 Google Trends (`src/data/fetch_google_trends.py`) needs no key but Google
 will throttle/CAPTCHA aggressive pulls -- run it locally, not in CI, and

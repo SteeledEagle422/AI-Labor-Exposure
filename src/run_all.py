@@ -100,6 +100,78 @@ def main():
 
     ok &= _step("10. Run event study", _run_event_study)
 
+    def _run_inference():
+        from src.analysis.inference import (
+            wild_cluster_bootstrap_pvalue, randomization_inference,
+        )
+        from src.analysis.utils import absorb_fixed_effects
+        from src.utils.config import load_config, OUTPUT_TABLES_DIR, ensure_dirs
+        import numpy as np
+
+        cfg = load_config()
+        ensure_dirs(OUTPUT_TABLES_DIR)
+        panel = pd.read_csv(PROCESSED_DIR / "analysis_panel.csv", parse_dates=["period"])
+
+        df = panel[panel["group"].isin(("tech", "stem_control", "non_stem_control"))].copy()
+        df["log_postings"] = np.log(df["indeed_job_postings_index"].clip(lower=0.01))
+        df["treat_post"] = df["is_tech"] * df["post_chatgpt_launch"]
+        resid = absorb_fixed_effects(df, cols=["log_postings", "treat_post"],
+                                     fe_groups=["display_name", "period"])
+        y = (resid["log_postings"] - resid["log_postings"].mean()).to_numpy()
+        x = (resid["treat_post"] - resid["treat_post"].mean()).to_numpy()
+
+        wb = wild_cluster_bootstrap_pvalue(
+            y, x, df["display_name"], B=cfg["inference"]["wild_bootstrap_reps"])
+        print(wb)
+
+        def _beta_fn(p):
+            return run_baseline_did(p)["beta"]
+
+        ri = randomization_inference(
+            panel, _beta_fn, permute_col="is_tech",
+            n_reps=cfg["inference"]["randomization_inference_reps"])
+        print(ri)
+
+        pd.DataFrame([{**wb, **ri}]).to_csv(
+            OUTPUT_TABLES_DIR / "inference_baseline_did.csv", index=False)
+
+    ok &= _step("11. Inference: wild cluster bootstrap + randomization", _run_inference)
+
+    def _run_robustness():
+        from src.analysis import robustness as rb
+        from src.utils.config import OUTPUT_TABLES_DIR, ensure_dirs
+
+        ensure_dirs(OUTPUT_TABLES_DIR)
+        panel = pd.read_csv(PROCESSED_DIR / "analysis_panel.csv", parse_dates=["period"])
+
+        placebo = rb.placebo_event_date(panel, "2021-09-01")
+        print(placebo)
+        pd.DataFrame([placebo]).to_csv(
+            OUTPUT_TABLES_DIR / "robustness_placebo_event_date.csv", index=False)
+
+        alt_ctrl = rb.alt_control_group_comparison(panel)
+        print(alt_ctrl[["control_group_label", "beta", "se_cluster", "n_sectors"]])
+        alt_ctrl.to_csv(
+            OUTPUT_TABLES_DIR / "robustness_alt_control_groups.csv", index=False)
+
+        # These two need the continuous exposure scores (step 7), so they stay
+        # non-fatal -- a missing OEWS file shouldn't sink the whole step.
+        for label, fn in [("alt event date", lambda: rb.alt_event_date_comparison(panel)),
+                          ("alt exposure measure", lambda: rb.alt_exposure_measure_comparison(panel))]:
+            try:
+                print(fn())
+            except Exception as e:
+                print(f"  ({label} skipped -- {e})")
+
+        try:
+            sc = rb.synthetic_control(panel, treated_sector="Software Development")
+            print({k: v for k, v in sc.items() if k != "gap_series"})
+        except Exception as e:
+            print(f"  (synthetic control skipped -- {e})")
+
+    ok &= _step("12. Robustness: placebo, alt controls, alt exposure, synthetic control",
+                _run_robustness)
+
     print(f"\n{'=' * 70}")
     print("Pipeline finished." if ok else "Pipeline finished WITH FAILURES -- see [FAILED] steps above.")
     print(f"{'=' * 70}")
