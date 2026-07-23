@@ -17,8 +17,9 @@ project:
 # -----------------------------------------------------------------------------
 sample:
   start_date: "2021-01-01"   # ~18 months of pre-period before the Fed hikes
-  end_date: "2025-12-31"     # trim the last ~6 months at analysis time to avoid
+  end_date: "2026-01-31"     # trim the last ~6 months at analysis time to avoid
                              # revision noise in the most recent Indeed data
+                             # (bump this forward periodically -- see README)
 
 # -----------------------------------------------------------------------------
 # Key dates (Section 3, Institutional Background)

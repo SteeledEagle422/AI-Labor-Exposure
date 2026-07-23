@@ -12,6 +12,8 @@ Pulls two files for the US:
 Usage:
     python -m src.data.fetch_indeed_hiring_lab
 """
+from __future__ import annotations
+
 import sys
 import requests
 import pandas as pd

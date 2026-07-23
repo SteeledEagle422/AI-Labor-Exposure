@@ -14,6 +14,8 @@ Columns of interest (all in [0, 1], one row per O*NET-SOC detailed occupation):
 Usage:
     python -m src.data.fetch_eloundou_exposure
 """
+from __future__ import annotations
+
 import sys
 import requests
 import pandas as pd

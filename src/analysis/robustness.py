@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-from src.utils.config import load_config, PROCESSED_DIR, OUTPUT_TABLES_DIR, OUTPUT_FIGURES_DIR, ensure_dirs
+from src.utils.config import load_config, PROCESSED_DIR, OUTPUT_TABLES_DIR, OUTPUT_FIGURES_DIR, ensure_dirs, exposure_primary_column
 from src.analysis.did_baseline import run_baseline_did
 from src.analysis.continuous_exposure_did import run_continuous_exposure_did
 from src.analysis.triple_diff import run_triple_diff
@@ -42,8 +42,14 @@ def placebo_event_date(
     (e.g. a pre-existing trend the FE structure isn't fully absorbing)."""
     df = panel.copy()
     placebo_ts = pd.Timestamp(placebo_date)
-    if placebo_ts >= panel["period"].min() + pd.Timedelta(weeks=8):
-        pass  # fine, plenty of pre-period on both sides
+    panel_start, panel_end = panel["period"].min(), panel["period"].max()
+    min_buffer = pd.Timedelta(weeks=8)
+    if placebo_ts - panel_start < min_buffer or panel_end - placebo_ts < min_buffer:
+        raise ValueError(
+            f"placebo_date {placebo_date} doesn't leave at least 8 weeks of data "
+            f"on both sides (panel spans {panel_start.date()} to {panel_end.date()}) "
+            f"-- pick a placebo date with more buffer or the result isn't meaningful."
+        )
     df["post_placebo"] = (df["period"] >= placebo_ts).astype(int)
 
     result = regression_fn(df, event_col="post_placebo", **regression_kwargs)
@@ -89,7 +95,7 @@ def alt_control_group_comparison(panel: pd.DataFrame, regression_fn=run_baseline
 # ---------------------------------------------------------------------------
 def alt_exposure_measure_comparison(panel: pd.DataFrame, regression_fn=run_triple_diff, **kwargs) -> pd.DataFrame:
     rows = []
-    for col in ["exposure_eloundou_beta", "exposure_aioe_via_crosswalk", "exposure_aioe_direct_naics"]:
+    for col in [exposure_primary_column(), "exposure_aioe_via_crosswalk", "exposure_aioe_direct_naics"]:
         try:
             r = regression_fn(panel, exposure_col=col, **kwargs)
         except ValueError as e:
@@ -123,11 +129,16 @@ def synthetic_control(
 
     common_idx = treated.index.intersection(donor_wide.index)
     treated = treated.loc[common_idx]
-    donor_wide = donor_wide.loc[common_idx, donor_names].dropna(axis=1)
-    donor_names = list(donor_wide.columns)
+    donor_wide = donor_wide.loc[common_idx, donor_names]
 
     pre_mask = df.set_index("period").loc[common_idx, event_col] == 0
     pre_mask = pre_mask[~pre_mask.index.duplicated()]
+
+    # Only require a donor's PRE-PERIOD data (what's actually fit on) to be
+    # complete -- a post-period gap elsewhere in the sample shouldn't shrink
+    # the donor pool.
+    donor_wide = donor_wide.loc[:, donor_wide.loc[pre_mask.to_numpy()].notna().all()]
+    donor_names = list(donor_wide.columns)
 
     y_pre = treated[pre_mask].to_numpy()
     X_pre = donor_wide.loc[pre_mask].to_numpy()
@@ -143,12 +154,15 @@ def synthetic_control(
     res = minimize(loss, w0, method="SLSQP", bounds=bounds, constraints=[constraint])
     weights = res.x
 
+    # a donor can still have a post-period gap even after the pre-period
+    # completeness filter above, which would NaN out the synthetic value for
+    # that period alone -- use nan-aware aggregation rather than dropping it.
     synthetic_series = donor_wide.to_numpy() @ weights
     gap = treated.to_numpy() - synthetic_series
 
     post_mask = ~pre_mask
-    pre_rmse = float(np.sqrt(np.mean(gap[pre_mask.to_numpy()] ** 2)))
-    post_gap_mean = float(np.mean(gap[post_mask.to_numpy()]))
+    pre_rmse = float(np.sqrt(np.nanmean(gap[pre_mask.to_numpy()] ** 2)))
+    post_gap_mean = float(np.nanmean(gap[post_mask.to_numpy()]))
 
     weight_table = pd.Series(weights, index=donor_names).sort_values(ascending=False)
 

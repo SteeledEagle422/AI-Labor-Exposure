@@ -18,6 +18,8 @@ Produces one row per (sector, time period) with:
 Usage:
     python -m src.data.build_panel
 """
+from __future__ import annotations
+
 import sys
 import warnings
 
@@ -45,7 +47,10 @@ def _aggregate_to_period(df: pd.DataFrame, freq: str) -> pd.DataFrame:
         .reset_index()
         .rename(columns={"date": "period"})
     )
-    return df
+    # resample() inserts a row for every calendar period in each sector's
+    # span, even ones with no underlying observations -- drop those rather
+    # than let NaN flow into the regressions downstream.
+    return df.dropna(subset=["indeed_job_postings_index"])
 
 
 def build_panel(cfg: dict | None = None, postings_variable: str = "total postings") -> pd.DataFrame:

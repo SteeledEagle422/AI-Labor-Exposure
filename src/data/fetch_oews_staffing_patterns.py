@@ -33,6 +33,8 @@ MANUAL STEP (if the automatic download fails):
 Usage:
     python -m src.data.fetch_oews_staffing_patterns
 """
+from __future__ import annotations
+
 import io
 import sys
 import zipfile

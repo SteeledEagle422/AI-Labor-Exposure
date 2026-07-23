@@ -24,6 +24,8 @@ re-verify if BLS ever restructures CES industry codes).
 Usage:
     python -m src.data.fetch_bls_ces
 """
+from __future__ import annotations
+
 import os
 import sys
 import json

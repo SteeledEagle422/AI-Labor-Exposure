@@ -15,21 +15,24 @@ Spec:  log(postings_index)_st = beta * (exposure_s * post_t) + sector FE_s + per
 Usage:
     python -m src.analysis.continuous_exposure_did
 """
+from __future__ import annotations
+
 import sys
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from src.utils.config import load_config, PROCESSED_DIR, OUTPUT_TABLES_DIR, ensure_dirs
+from src.utils.config import load_config, PROCESSED_DIR, OUTPUT_TABLES_DIR, ensure_dirs, exposure_primary_column
 from src.analysis.utils import absorb_fixed_effects, cluster_robust_se
 
 
 def run_continuous_exposure_did(
     panel: pd.DataFrame,
     event_col: str = "post_copilot_ga",
-    exposure_col: str = "exposure_eloundou_beta",
+    exposure_col: str | None = None,
     groups: tuple[str, ...] = ("tech", "stem_control", "non_stem_control"),
 ) -> dict:
+    exposure_col = exposure_col or exposure_primary_column()
     df = panel[panel["group"].isin(groups)].copy()
     df = df.dropna(subset=[exposure_col])
     if df.empty:

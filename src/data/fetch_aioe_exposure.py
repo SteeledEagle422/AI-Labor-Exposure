@@ -16,6 +16,8 @@ Sheets used:
 Usage:
     python -m src.data.fetch_aioe_exposure
 """
+from __future__ import annotations
+
 import sys
 import requests
 import pandas as pd

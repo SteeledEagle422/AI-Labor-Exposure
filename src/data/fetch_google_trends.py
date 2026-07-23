@@ -17,6 +17,8 @@ Practical tips if you hit 429s when running this yourself:
 Usage:
     python -m src.data.fetch_google_trends
 """
+from __future__ import annotations
+
 import sys
 import time
 

@@ -28,6 +28,8 @@ Depends on having already run (in order):
 Usage:
     python -m src.data.build_exposure_crosswalk
 """
+from __future__ import annotations
+
 import sys
 import numpy as np
 import pandas as pd
@@ -85,7 +87,11 @@ def _sector_employment_weights(oews: pd.DataFrame, naics_codes: list[str]) -> tu
     if not frames:
         return pd.DataFrame(columns=["soc_code", "tot_emp", "emp_share"]), worst_level
 
-    pooled = pd.concat(frames, ignore_index=True)
+    # drop_duplicates guards against double-counting: if two of the sector's
+    # mapped NAICS codes both fall back to the same coarse prefix match (see
+    # _match_naics_employment), they'd otherwise return the identical set of
+    # OEWS rows and sum their employment twice.
+    pooled = pd.concat(frames, ignore_index=True).drop_duplicates()
     # occ_code in OEWS is already 6-char SOC ("15-1252"); Eloundou/AIOE use the
     # same 6-char SOC after our own fetch scripts normalized it.
     by_soc = pooled.groupby("occ_code", as_index=False)["tot_emp"].sum()

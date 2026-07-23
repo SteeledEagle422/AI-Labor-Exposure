@@ -63,9 +63,12 @@ Two things need a one-time, free registration before their fetch scripts
 will run at full strength:
 
 - **BLS API key** (for `src/data/fetch_bls_ces.py`): register at
-  https://data.bls.gov/registrationEngine/, then
-  `export BLS_API_KEY="your-key"`. Without it the script still runs against
-  BLS's unregistered endpoint but is capped at ~10 years of history and
+  https://data.bls.gov/registrationEngine/, then either
+  `export BLS_API_KEY="your-key"` or copy `.env.example` to `.env` and drop
+  the key in there (`cp .env.example .env`, then edit it) -- `.env` is
+  gitignored and picked up automatically by every script via
+  `src/utils/config.py`. Without it the script still runs against BLS's
+  unregistered endpoint but is capped at ~10 years of history and
   25 queries/day.
 - **OEWS staffing-pattern file** (for `src/data/fetch_oews_staffing_patterns.py`):
   the script attempts an automatic download; if BLS has restructured their
